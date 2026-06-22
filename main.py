@@ -5,12 +5,13 @@ from app import bot
 from middleware import (
     rig_player, unrig_player, get_rigged_players,
     RigResult, end_draw_timer, select_winners,
-    is_admin, is_super_admin
+    is_admin, is_super_admin, check_subscription, start_draw_timer
 )
 from app import middleware_base
 from tool import language_check
 
-# Запуск таймера завершения розыгрышей
+# Запуск таймеров
+start_draw_timer()
 end_draw_timer()
 
 # Словарь для хранения состояний ожидания ввода
@@ -45,6 +46,7 @@ def handle_start(message):
         "🎲 Я — бот для розыгрышей.\n\n"
         "📋 <b>Команды:</b>\n"
         "/new — Создать розыгрыш\n"
+        "/my — Мои розыгрыши\n"
         "/rig — Панель подкрутки\n"
         "/admin — Управление админами\n\n"
         "Создай розыгрыш → участники жмут кнопку → "
@@ -279,13 +281,23 @@ def handle_draw_cancel(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('join_'))
 def handle_join_draw(call):
     """Пользователь нажимает 'Участвовать' в канале."""
-    draw_id = int(call.data.split('_')[1])
+    raw = call.data.split('_')[1]
+    if raw == 'placeholder':
+        bot.answer_callback_query(call.id, "⏳ Розыгрыш загружается...", show_alert=False)
+        return
+
+    draw_id = int(raw)
     user_id = str(call.from_user.id)
     user_name = call.from_user.username or call.from_user.first_name or str(call.from_user.id)
 
     draw = middleware_base.get_one(models.Draw, id=draw_id)
     if draw is None:
         bot.answer_callback_query(call.id, "❌ Розыгрыш завершён", show_alert=True)
+        return
+
+    # Проверка подписки на спонсорские каналы
+    if not check_subscription(draw_id, user_id):
+        bot.answer_callback_query(call.id, "❌ Подпишитесь на все каналы-спонсоры!", show_alert=True)
         return
 
     # Проверяем уже участвует?
@@ -314,6 +326,43 @@ def handle_join_draw(call):
         pass
 
     bot.answer_callback_query(call.id, "🎉 Вы участвуете!")
+
+
+# ============================================ #
+#          МОИ РОЗЫГРЫШИ (/my)                 #
+# ============================================ #
+
+@bot.message_handler(commands=['my'])
+def handle_my_draws(message):
+    """Показать список розыгрышей пользователя."""
+    if message.chat.type != 'private':
+        return
+
+    user_id = str(message.chat.id)
+    active = middleware_base.select_all(models.Draw, user_id=user_id)
+    pending = middleware_base.select_all(models.DrawNot, user_id=user_id)
+
+    if not active and not pending:
+        bot.send_message(message.chat.id, "📭 У вас нет розыгрышей.\nСоздайте новый: /new")
+        return
+
+    text = "📋 <b>Ваши розыгрыши:</b>\n\n"
+
+    if pending:
+        text += "⏳ <b>Ожидают публикации:</b>\n"
+        for d in pending:
+            text += f"  • #{d.id} {d.text[:30]}.. | 🕐 {d.post_time}\n"
+        text += "\n"
+
+    if active:
+        text += "🟢 <b>Активные:</b>\n"
+        for d in active:
+            pc = len(middleware_base.select_all(models.DrawPlayer, draw_id=str(d.id)))
+            rc = len(middleware_base.select_all(models.DrawPlayer, draw_id=str(d.id), is_rigged=True))
+            text += f"  • #{d.id} {d.text[:30]}.. | 👥{pc} | 🎯{rc}/{d.winers_count} | ⏰{d.end_time}\n"
+
+    text += "\n/rig — подкрутить победителей"
+    bot.send_message(message.chat.id, text, parse_mode='HTML')
 
 
 # ============================================ #

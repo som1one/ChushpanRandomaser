@@ -139,6 +139,58 @@ def get_rigged_players(draw_id: int, admin_id: str) -> list | RigResult:
     return rigged
 
 
+def check_subscription(draw_id: int, user_id: str) -> bool:
+    """Проверяет подписку пользователя на спонсорские каналы розыгрыша."""
+    channels = middleware_base.select_all(models.SubscribeChannel, draw_id=draw_id)
+    if not channels:
+        return True  # Нет каналов для проверки
+
+    for ch in channels:
+        try:
+            member = bot.get_chat_member(chat_id=ch.channel_id, user_id=int(user_id))
+            if member.status in ['left', 'kicked']:
+                return False
+        except:
+            return False
+    return True
+
+
+def start_draw_timer():
+    """Таймер публикации отложенных розыгрышей (из DrawNot в Draw)."""
+    def timer():
+        while True:
+            for draw in post_base.select_all(models.DrawNot):
+                now = datetime.now().strftime('%Y-%m-%d %H:%M')
+                now_t = time.strptime(now, '%Y-%m-%d %H:%M')
+                if now_t >= time.strptime(draw.post_time, '%Y-%m-%d %H:%M'):
+                    text = language_check(draw.user_id)[1]['draw']
+                    try:
+                        join_markup = create_inlineKeyboard(
+                            {f"🎉 {text['get_on']} (0)": f"join_{draw.id}"}
+                        )
+                        if draw.file_type == 'photo':
+                            msg = bot.send_photo(draw.chanel_id, draw.file_id,
+                                                 caption=draw.text, reply_markup=join_markup)
+                        elif draw.file_type == 'document':
+                            msg = bot.send_document(draw.chanel_id, draw.file_id,
+                                                    caption=draw.text, reply_markup=join_markup)
+                        else:
+                            msg = bot.send_message(draw.chanel_id, draw.text,
+                                                   reply_markup=join_markup)
+
+                        post_base.new(models.Draw, draw.id, draw.user_id,
+                                      str(msg.message_id), draw.chanel_id, draw.chanel_name,
+                                      draw.text, draw.file_type, draw.file_id,
+                                      draw.winers_count, draw.post_time, draw.end_time)
+                        post_base.delete(models.DrawNot, id=draw.id)
+                    except:
+                        pass
+            time.sleep(5)
+
+    rT = threading.Thread(target=timer, daemon=True)
+    rT.start()
+
+
 def end_draw_timer():
     """Таймер завершения розыгрыша. Использует select_winners() для выбора победителей."""
     def end_timer():
