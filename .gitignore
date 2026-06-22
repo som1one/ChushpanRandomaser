@@ -1,0 +1,21 @@
+# Environment
+.env
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Docker
+bot-data/
+
+# Kiro
+.kiro/
