@@ -18,6 +18,41 @@ _waiting_for = {}
 
 
 # ============================================ #
+#                 /start                       #
+# ============================================ #
+
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    if message.chat.type != 'private':
+        return
+
+    user_id = str(message.chat.id)
+    user_name = message.from_user.username or message.from_user.first_name
+
+    # Регистрация пользователя если его нет
+    if not middleware_base.get_one(models.User, user_id=user_id):
+        middleware_base.new(models.User, user_id, user_name, "RU")
+
+    admin_label = ""
+    if is_super_admin(user_id):
+        admin_label = " 👑 Главный админ"
+    elif is_admin(user_id):
+        admin_label = " 🛡 Админ"
+
+    bot.send_message(
+        message.chat.id,
+        f"👋 Привет, {user_name}!{admin_label}\n\n"
+        "🎲 Я — бот для розыгрышей с подкруткой.\n\n"
+        "📋 <b>Команды:</b>\n"
+        "/rig — Панель подкрутки\n"
+        "/admin — Управление админами\n\n"
+        "Создавайте розыгрыши, добавляйте участников — "
+        "а потом подкручивайте победителей через /rig 😏",
+        parse_mode='HTML'
+    )
+
+
+# ============================================ #
 #          АДМИН-ПАНЕЛЬ ПОДКРУТКИ              #
 # ============================================ #
 
