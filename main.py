@@ -42,14 +42,278 @@ def handle_start(message):
     bot.send_message(
         message.chat.id,
         f"👋 Привет, {user_name}!{admin_label}\n\n"
-        "🎲 Я — бот для розыгрышей с подкруткой.\n\n"
+        "🎲 Я — бот для розыгрышей.\n\n"
         "📋 <b>Команды:</b>\n"
+        "/new — Создать розыгрыш\n"
         "/rig — Панель подкрутки\n"
         "/admin — Управление админами\n\n"
-        "Создавайте розыгрыши, добавляйте участников — "
-        "а потом подкручивайте победителей через /rig 😏",
+        "Создай розыгрыш → участники жмут кнопку → "
+        "подкрути победителей через /rig 😏",
         parse_mode='HTML'
     )
+
+
+# ============================================ #
+#          СОЗДАНИЕ РОЗЫГРЫША                  #
+# ============================================ #
+
+@bot.message_handler(commands=['new'])
+def handle_new_draw(message):
+    """Начать создание нового розыгрыша."""
+    if message.chat.type != 'private':
+        return
+
+    user_id = str(message.chat.id)
+
+    # Регистрация если нет
+    if not middleware_base.get_one(models.User, user_id=user_id):
+        user_name = message.from_user.username or message.from_user.first_name
+        middleware_base.new(models.User, user_id, user_name, "RU")
+
+    _waiting_for[message.chat.id] = {'action': 'draw_channel'}
+    bot.send_message(
+        message.chat.id,
+        "🎲 <b>Создание розыгрыша</b>\n\n"
+        "Шаг 1/5: Введите ID канала или группы, где будет розыгрыш.\n"
+        "(Бот должен быть админом канала)\n\n"
+        "Пример: <code>-1001234567890</code>",
+        parse_mode='HTML'
+    )
+
+
+# Шаг 1: Ввод канала
+@bot.message_handler(func=lambda msg: msg.chat.id in _waiting_for and _waiting_for[msg.chat.id].get('action') == 'draw_channel')
+def handle_draw_channel(message):
+    channel_id = message.text.strip()
+
+    # Проверяем что бот — админ канала
+    try:
+        bot_member = bot.get_chat_member(channel_id, bot.get_me().id)
+        if bot_member.status not in ['administrator', 'creator']:
+            bot.send_message(message.chat.id, "❌ Бот не является администратором канала. Добавьте бота как админа и попробуйте снова.")
+            return
+        chat_info = bot.get_chat(channel_id)
+        channel_name = chat_info.title
+    except Exception:
+        bot.send_message(message.chat.id, "❌ Не удалось найти канал. Проверьте ID и убедитесь что бот добавлен.")
+        return
+
+    _waiting_for[message.chat.id] = {
+        'action': 'draw_text',
+        'channel_id': channel_id,
+        'channel_name': channel_name
+    }
+    bot.send_message(
+        message.chat.id,
+        f"✅ Канал: <b>{channel_name}</b>\n\n"
+        "Шаг 2/5: Введите текст розыгрыша (что разыгрываете):",
+        parse_mode='HTML'
+    )
+
+
+# Шаг 2: Текст розыгрыша
+@bot.message_handler(func=lambda msg: msg.chat.id in _waiting_for and _waiting_for[msg.chat.id].get('action') == 'draw_text')
+def handle_draw_text(message):
+    state = _waiting_for[message.chat.id]
+    state['action'] = 'draw_winners'
+    state['text'] = message.text.strip()
+
+    bot.send_message(
+        message.chat.id,
+        "Шаг 3/5: Сколько победителей? (введите число)",
+    )
+
+
+# Шаг 3: Количество победителей
+@bot.message_handler(func=lambda msg: msg.chat.id in _waiting_for and _waiting_for[msg.chat.id].get('action') == 'draw_winners')
+def handle_draw_winners(message):
+    try:
+        count = int(message.text.strip())
+        if count < 1:
+            raise ValueError
+    except ValueError:
+        bot.send_message(message.chat.id, "❌ Введите положительное число.")
+        return
+
+    state = _waiting_for[message.chat.id]
+    state['action'] = 'draw_duration'
+    state['winners_count'] = count
+
+    bot.send_message(
+        message.chat.id,
+        "Шаг 4/5: Через сколько минут завершить розыгрыш?\n\n"
+        "Примеры: <code>5</code> (5 мин), <code>60</code> (1 час), <code>1440</code> (1 день)",
+        parse_mode='HTML'
+    )
+
+
+# Шаг 4: Длительность
+@bot.message_handler(func=lambda msg: msg.chat.id in _waiting_for and _waiting_for[msg.chat.id].get('action') == 'draw_duration')
+def handle_draw_duration(message):
+    try:
+        minutes = int(message.text.strip())
+        if minutes < 1:
+            raise ValueError
+    except ValueError:
+        bot.send_message(message.chat.id, "❌ Введите положительное число минут.")
+        return
+
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    post_time = now.strftime('%Y-%m-%d %H:%M')
+    end_time = (now + timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M')
+
+    state = _waiting_for[message.chat.id]
+    state['action'] = 'draw_confirm'
+    state['post_time'] = post_time
+    state['end_time'] = end_time
+    state['duration_min'] = minutes
+
+    # Превью
+    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        telebot.types.InlineKeyboardButton("✅ Опубликовать", callback_data="draw_confirm"),
+        telebot.types.InlineKeyboardButton("❌ Отмена", callback_data="draw_cancel"),
+    )
+
+    bot.send_message(
+        message.chat.id,
+        f"📋 <b>Превью розыгрыша:</b>\n\n"
+        f"📢 Канал: {state['channel_name']}\n"
+        f"📝 Текст: {state['text']}\n"
+        f"🏆 Победителей: {state['winners_count']}\n"
+        f"⏰ Завершение через: {minutes} мин ({end_time})\n\n"
+        "Всё верно?",
+        reply_markup=markup,
+        parse_mode='HTML'
+    )
+
+
+# Шаг 5: Подтверждение
+@bot.callback_query_handler(func=lambda call: call.data == 'draw_confirm')
+def handle_draw_confirm(call):
+    state = _waiting_for.pop(call.from_user.id, None)
+    if not state or state.get('action') != 'draw_confirm':
+        bot.answer_callback_query(call.id, "⚠️ Сессия создания истекла", show_alert=True)
+        return
+
+    user_id = str(call.from_user.id)
+
+    # Публикуем пост в канал
+    text = state['text']
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton(
+        "🎉 Участвовать", callback_data="join_placeholder"
+    ))
+
+    try:
+        msg = bot.send_message(
+            state['channel_id'],
+            f"🎲 <b>РОЗЫГРЫШ</b>\n\n{text}\n\n"
+            f"🏆 Победителей: {state['winners_count']}\n"
+            f"⏰ До: {state['end_time']}\n\n"
+            f"👥 Участников: 0",
+            reply_markup=markup,
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        bot.edit_message_text(
+            f"❌ Ошибка публикации: {e}",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id
+        )
+        bot.answer_callback_query(call.id)
+        return
+
+    # Сохраняем в БД как активный розыгрыш
+    # Получаем следующий id
+    all_draws = middleware_base.select_all(models.Draw)
+    next_id = max([d.id for d in all_draws], default=0) + 1
+
+    middleware_base.new(
+        models.Draw,
+        next_id, user_id, str(msg.message_id),
+        state['channel_id'], state['channel_name'],
+        text, 'text', '',
+        state['winners_count'], state['post_time'], state['end_time']
+    )
+
+    # Обновляем кнопку участия с правильным draw_id
+    join_markup = telebot.types.InlineKeyboardMarkup()
+    join_markup.add(telebot.types.InlineKeyboardButton(
+        "🎉 Участвовать (0)", callback_data=f"join_{next_id}"
+    ))
+    bot.edit_message_reply_markup(
+        chat_id=state['channel_id'],
+        message_id=msg.message_id,
+        reply_markup=join_markup
+    )
+
+    bot.edit_message_text(
+        f"✅ <b>Розыгрыш #{next_id} опубликован!</b>\n\n"
+        f"📢 {state['channel_name']}\n"
+        f"⏰ Завершится: {state['end_time']}\n\n"
+        "Используй /rig чтобы подкрутить победителей.",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        parse_mode='HTML'
+    )
+    bot.answer_callback_query(call.id, "✅ Опубликовано!")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'draw_cancel')
+def handle_draw_cancel(call):
+    _waiting_for.pop(call.from_user.id, None)
+    bot.edit_message_text(
+        "❌ Создание розыгрыша отменено.",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id
+    )
+    bot.answer_callback_query(call.id)
+
+
+# ============================================ #
+#          УЧАСТИЕ В РОЗЫГРЫШЕ                 #
+# ============================================ #
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('join_'))
+def handle_join_draw(call):
+    """Пользователь нажимает 'Участвовать' в канале."""
+    draw_id = int(call.data.split('_')[1])
+    user_id = str(call.from_user.id)
+    user_name = call.from_user.username or call.from_user.first_name or str(call.from_user.id)
+
+    draw = middleware_base.get_one(models.Draw, id=draw_id)
+    if draw is None:
+        bot.answer_callback_query(call.id, "❌ Розыгрыш завершён", show_alert=True)
+        return
+
+    # Проверяем уже участвует?
+    existing = middleware_base.get_one(models.DrawPlayer, draw_id=str(draw_id), user_id=user_id)
+    if existing:
+        bot.answer_callback_query(call.id, "✋ Вы уже участвуете!", show_alert=True)
+        return
+
+    # Добавляем участника
+    middleware_base.new(models.DrawPlayer, draw_id, user_id, user_name)
+
+    # Обновляем счётчик на кнопке
+    players_count = len(middleware_base.select_all(models.DrawPlayer, draw_id=str(draw_id)))
+    join_markup = telebot.types.InlineKeyboardMarkup()
+    join_markup.add(telebot.types.InlineKeyboardButton(
+        f"🎉 Участвовать ({players_count})", callback_data=f"join_{draw_id}"
+    ))
+
+    try:
+        bot.edit_message_reply_markup(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=join_markup
+        )
+    except:
+        pass
+
+    bot.answer_callback_query(call.id, "🎉 Вы участвуете!")
 
 
 # ============================================ #
