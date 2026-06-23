@@ -29,7 +29,10 @@ def _main_menu_keyboard(user_id):
     """Создаёт Reply-клавиатуру главного меню."""
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row(BTN_NEW)
-    markup.row(BTN_MY, BTN_MANAGE)
+    markup.row(BTN_MY)
+    # Кнопка управления (выбор победителей) — только для админов
+    if is_admin(str(user_id)):
+        markup.row(BTN_MANAGE)
     if is_super_admin(str(user_id)):
         markup.row(BTN_ADMINS)
     return markup
@@ -74,6 +77,8 @@ def handle_btn_my(message):
 
 @bot.message_handler(func=lambda msg: msg.text == BTN_MANAGE)
 def handle_btn_manage(message):
+    if not is_admin(str(message.chat.id)):
+        return
     handle_rig_panel(message)
 
 @bot.message_handler(func=lambda msg: msg.text == BTN_ADMINS)
