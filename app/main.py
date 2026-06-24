@@ -86,19 +86,36 @@ async def main() -> None:
 
     # Register routers
     from app.handlers.start import start_router
+    from app.handlers.account import account_router
     from app.handlers.lot_main import lot_main_router
+    from app.handlers.lot_contest import lot_contest_router
     from app.handlers.lot_lottery import lot_lottery_router
+    from app.handlers.lot_referral import lot_referral_router
+    from app.handlers.fastclick import fastclick_router
+    from app.handlers.event_participation import event_participation_router
     from app.handlers.rig import rig_router
-    from app.handlers.top import top_router
-    from app.handlers.post import post_router
+    from app.handlers.admin import admin_router
+    from app.handlers.channel import channel_router
     from app.handlers.quiz import quiz_router
+    from app.handlers.post import post_router
+    from app.handlers.list_manage import list_manage_router
+    from app.handlers.top import top_router
+
     dp.include_router(start_router)
+    dp.include_router(account_router)
     dp.include_router(lot_main_router)
+    dp.include_router(lot_contest_router)
     dp.include_router(lot_lottery_router)
+    dp.include_router(lot_referral_router)
+    dp.include_router(fastclick_router)
+    dp.include_router(event_participation_router)
     dp.include_router(rig_router)
-    dp.include_router(top_router)
-    dp.include_router(post_router)
+    dp.include_router(admin_router)
+    dp.include_router(channel_router)
     dp.include_router(quiz_router)
+    dp.include_router(post_router)
+    dp.include_router(list_manage_router)
+    dp.include_router(top_router)
 
     logging.info("Bot starting...")
     try:
