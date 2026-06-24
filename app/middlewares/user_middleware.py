@@ -3,13 +3,13 @@
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject, Update
+from aiogram.types import TelegramObject, Message, CallbackQuery
 
 from app.services.user_service import UserService
 
 
 class UserRegistrationMiddleware(BaseMiddleware):
-    """Ensures user exists in DB for every incoming update."""
+    """Ensures user exists in DB for every incoming message/callback."""
 
     async def __call__(
         self,
@@ -18,12 +18,12 @@ class UserRegistrationMiddleware(BaseMiddleware):
         data: Dict[str, Any],
     ) -> Any:
         user_service: UserService = data.get("user_service")
-        if user_service and isinstance(event, Update):
+        if user_service:
             user = None
-            if event.message and event.message.from_user:
-                user = event.message.from_user
-            elif event.callback_query and event.callback_query.from_user:
-                user = event.callback_query.from_user
+            if isinstance(event, Message) and event.from_user:
+                user = event.from_user
+            elif isinstance(event, CallbackQuery) and event.from_user:
+                user = event.from_user
 
             if user:
                 await user_service.ensure_user_exists(user.id)

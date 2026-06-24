@@ -78,8 +78,14 @@ async def main() -> None:
         cache=cache,
         config=config,
     )
-    dp.update.outer_middleware(service_mw)
-    dp.update.outer_middleware(UserRegistrationMiddleware())
+    # Register on all event types so handlers receive services via kwargs
+    dp.message.outer_middleware(service_mw)
+    dp.callback_query.outer_middleware(service_mw)
+    dp.my_chat_member.outer_middleware(service_mw)
+
+    user_reg_mw = UserRegistrationMiddleware()
+    dp.message.outer_middleware(user_reg_mw)
+    dp.callback_query.outer_middleware(user_reg_mw)
 
     # Bot commands
     await set_bot_commands(bot)
