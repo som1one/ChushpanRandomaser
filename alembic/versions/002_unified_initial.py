@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # --- users ---
     op.execute("""
-        CREATE TABLE users (
+        CREATE TABLE IF NOT EXISTS users (
             user_id BIGINT PRIMARY KEY,
             username TEXT,
             language VARCHAR(5) DEFAULT 'RU',
@@ -38,7 +38,7 @@ def upgrade() -> None:
 
     # --- admins ---
     op.execute("""
-        CREATE TABLE admins (
+        CREATE TABLE IF NOT EXISTS admins (
             id SERIAL PRIMARY KEY,
             user_id BIGINT UNIQUE NOT NULL,
             username TEXT,
@@ -49,7 +49,7 @@ def upgrade() -> None:
 
     # --- channels ---
     op.execute("""
-        CREATE TABLE channels (
+        CREATE TABLE IF NOT EXISTS channels (
             channel_id BIGINT PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,
             owner_id BIGINT NOT NULL,
@@ -60,7 +60,7 @@ def upgrade() -> None:
 
     # --- events ---
     op.execute("""
-        CREATE TABLE events (
+        CREATE TABLE IF NOT EXISTS events (
             event_id SERIAL PRIMARY KEY,
             creator_id BIGINT NOT NULL,
             channel_id BIGINT DEFAULT 0,
@@ -98,7 +98,7 @@ def upgrade() -> None:
 
     # --- event_participants ---
     op.execute("""
-        CREATE TABLE event_participants (
+        CREATE TABLE IF NOT EXISTS event_participants (
             id SERIAL PRIMARY KEY,
             event_id INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
             user_id BIGINT NOT NULL,
@@ -116,7 +116,7 @@ def upgrade() -> None:
 
     # --- sponsors ---
     op.execute("""
-        CREATE TABLE sponsors (
+        CREATE TABLE IF NOT EXISTS sponsors (
             sponsor_id SERIAL PRIMARY KEY,
             event_id INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
             username TEXT NOT NULL
@@ -125,7 +125,7 @@ def upgrade() -> None:
 
     # --- quizzes ---
     op.execute("""
-        CREATE TABLE quizzes (
+        CREATE TABLE IF NOT EXISTS quizzes (
             quiz_id SERIAL PRIMARY KEY,
             creator_id BIGINT NOT NULL,
             channel_id BIGINT,
@@ -143,7 +143,7 @@ def upgrade() -> None:
 
     # --- quiz_options ---
     op.execute("""
-        CREATE TABLE quiz_options (
+        CREATE TABLE IF NOT EXISTS quiz_options (
             option_id SERIAL PRIMARY KEY,
             quiz_id INTEGER NOT NULL REFERENCES quizzes(quiz_id) ON DELETE CASCADE,
             option_text TEXT NOT NULL,
@@ -153,7 +153,7 @@ def upgrade() -> None:
 
     # --- quiz_answers ---
     op.execute("""
-        CREATE TABLE quiz_answers (
+        CREATE TABLE IF NOT EXISTS quiz_answers (
             id SERIAL PRIMARY KEY,
             quiz_id INTEGER NOT NULL REFERENCES quizzes(quiz_id) ON DELETE CASCADE,
             user_id BIGINT NOT NULL,
@@ -165,7 +165,7 @@ def upgrade() -> None:
 
     # --- ad_templates ---
     op.execute("""
-        CREATE TABLE ad_templates (
+        CREATE TABLE IF NOT EXISTS ad_templates (
             template_id SERIAL PRIMARY KEY,
             text TEXT,
             media_type VARCHAR(20),
@@ -178,7 +178,7 @@ def upgrade() -> None:
 
     # --- event_bytes ---
     op.execute("""
-        CREATE TABLE event_bytes (
+        CREATE TABLE IF NOT EXISTS event_bytes (
             id SERIAL PRIMARY KEY,
             event_id INTEGER NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
             chat_id BIGINT NOT NULL,
@@ -187,15 +187,15 @@ def upgrade() -> None:
     """)
 
     # --- indexes ---
-    op.execute("CREATE INDEX idx_channels_owner ON channels(owner_id);")
-    op.execute("CREATE INDEX idx_events_creator ON events(creator_id);")
-    op.execute("CREATE INDEX idx_events_active ON events(is_active) WHERE is_active = TRUE;")
-    op.execute("CREATE INDEX idx_events_finish ON events(finish_at) WHERE is_active = TRUE AND finish_at IS NOT NULL;")
-    op.execute("CREATE INDEX idx_events_scheduled ON events(scheduled_publish_at) WHERE scheduled_publish_at IS NOT NULL AND is_active = FALSE;")
-    op.execute("CREATE INDEX idx_participants_event ON event_participants(event_id);")
-    op.execute("CREATE INDEX idx_participants_user ON event_participants(user_id);")
-    op.execute("CREATE INDEX idx_participants_guaranteed ON event_participants(event_id) WHERE guaranteed_winner = TRUE;")
-    op.execute("CREATE INDEX idx_sponsors_event ON sponsors(event_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_channels_owner ON channels(owner_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_events_creator ON events(creator_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_events_active ON events(is_active) WHERE is_active = TRUE;")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_events_finish ON events(finish_at) WHERE is_active = TRUE AND finish_at IS NOT NULL;")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_events_scheduled ON events(scheduled_publish_at) WHERE scheduled_publish_at IS NOT NULL AND is_active = FALSE;")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_participants_event ON event_participants(event_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_participants_user ON event_participants(user_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_participants_guaranteed ON event_participants(event_id) WHERE guaranteed_winner = TRUE;")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_sponsors_event ON sponsors(event_id);")
 
 
 def downgrade() -> None:
