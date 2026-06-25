@@ -8,9 +8,9 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 start_router = Router()
 
 
-def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     """Build the main menu inline keyboard."""
-    return InlineKeyboardMarkup(inline_keyboard=[
+    rows = [
         [
             InlineKeyboardButton(text="🎟 Конкурс", callback_data="menu:lot"),
             InlineKeyboardButton(text="⚡ ФастКлик", callback_data="menu:fast"),
@@ -21,9 +21,11 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="📋 События", callback_data="menu:list"),
-            InlineKeyboardButton(text="⚙️ Управление", callback_data="menu:manage"),
         ],
-    ])
+    ]
+    if is_admin:
+        rows[-1].append(InlineKeyboardButton(text="⚙️ Управление", callback_data="menu:manage"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 @start_router.message(Command("start"))
@@ -33,6 +35,17 @@ async def cmd_start(message: types.Message, state: FSMContext, **kwargs):
 
     user = message.from_user
     name = user.first_name or user.username or "друг"
+
+    # Check if user is admin to show "Управление" button
+    rig_service = kwargs.get("rig_service")
+    is_admin = False
+    if rig_service:
+        if user.id in rig_service.admin_ids:
+            is_admin = True
+        else:
+            async with rig_service.db.acquire() as conn:
+                row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user.id)
+                is_admin = row is not None
 
     # Handle referral deep link (ref_{event_id}_{inviter_id})
     args = message.text.split(maxsplit=1)
@@ -53,7 +66,7 @@ async def cmd_start(message: types.Message, state: FSMContext, **kwargs):
         f"👋 Привет, {name}!\n\n"
         "Я — бот для проведения розыгрышей, конкурсов и лотерей.\n"
         "Выбери действие из меню ниже:",
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(is_admin=is_admin),
     )
 
 
