@@ -1,15 +1,14 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /bot
 
-# Зависимости
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-app.txt .
+RUN pip install --no-cache-dir -r requirements-app.txt
 
-# Исходный код
-COPY . .
+COPY app/ ./app/
+COPY alembic/ ./alembic/
+COPY alembic.ini .
 
 ENV PYTHONUNBUFFERED=1
 
-# Миграции + запуск бота
-CMD ["sh", "-c", "alembic upgrade head && python main.py"]
+CMD ["sh", "-c", "alembic upgrade head && python -m app.main"]
