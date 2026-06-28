@@ -83,7 +83,7 @@ async def on_admin_list(
     # Gather admin list from DB
     async with rig_service.db.acquire() as conn:
         db_admins = await conn.fetch(
-            "SELECT user_id, user_name, added_by FROM admins ORDER BY created_at ASC"
+            "SELECT user_id, user_name, added_by FROM admins ORDER BY id ASC"
         )
 
     if db_admins:
