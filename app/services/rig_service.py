@@ -89,9 +89,9 @@ class RigService:
             return True
 
         async with self.db.acquire() as conn:
-            # Check if admin exists in DB admins table
+            # Check if admin exists in DB admins table (user_id stored as TEXT)
             db_admin = await conn.fetchval(
-                "SELECT 1 FROM admins WHERE user_id=$1", admin_id
+                "SELECT 1 FROM admins WHERE user_id=$1", str(admin_id)
             )
             if db_admin:
                 return True

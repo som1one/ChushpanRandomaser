@@ -21,7 +21,7 @@ async def _get_manageable_events(
     is_admin = user_id in rig_service.admin_ids
     if not is_admin:
         async with rig_service.db.acquire() as conn:
-            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", str(user_id))
             is_admin = row is not None
 
     if not is_admin:
@@ -140,7 +140,7 @@ async def on_rig_draw(
     is_admin = user_id in rig_service.admin_ids
     if not is_admin:
         async with rig_service.db.acquire() as conn:
-            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", str(user_id))
             is_admin = row is not None
 
     if not is_admin:
@@ -173,7 +173,7 @@ async def on_rig_toggle(
     is_admin = admin_id in rig_service.admin_ids
     if not is_admin:
         async with rig_service.db.acquire() as conn:
-            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", admin_id)
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", str(admin_id))
             is_admin = row is not None
 
     if not is_admin:
@@ -215,7 +215,7 @@ async def on_rig_page(
     is_admin = user_id in rig_service.admin_ids
     if not is_admin:
         async with rig_service.db.acquire() as conn:
-            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", str(user_id))
             is_admin = row is not None
 
     if not is_admin:

@@ -167,7 +167,7 @@ async def menu_manage(callback: types.CallbackQuery, **kwargs):
     is_admin = user_id in rig_service.admin_ids
     if not is_admin:
         async with rig_service.db.acquire() as conn:
-            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", str(user_id))
             is_admin = row is not None
 
     if not is_admin:

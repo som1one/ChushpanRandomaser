@@ -22,10 +22,10 @@ async def _is_admin(user_id: int, rig_service: RigService) -> bool:
     """Check if user is a super-admin (config) or DB-stored admin."""
     if user_id in rig_service.admin_ids:
         return True
-    # Check DB admins table
+    # Check DB admins table (user_id stored as TEXT in old schema)
     async with rig_service.db.acquire() as conn:
         row = await conn.fetchval(
-            "SELECT 1 FROM admins WHERE user_id=$1", user_id
+            "SELECT 1 FROM admins WHERE user_id=$1", str(user_id)
         )
         return row is not None
 
@@ -186,7 +186,7 @@ async def on_admin_manage_input(
         await message.answer("Введите числовой ID пользователя или /cancel для отмены.")
         return
 
-    target_id = int(text)
+    target_id = text  # Keep as string — old DB schema stores user_id as TEXT
 
     if action == "add":
         async with rig_service.db.acquire() as conn:
@@ -200,13 +200,13 @@ async def on_admin_manage_input(
                 # Try to get username from Telegram
                 username = None
                 try:
-                    chat = await message.bot.get_chat(target_id)
+                    chat = await message.bot.get_chat(int(target_id))
                     username = chat.username
                 except Exception:
                     pass
                 await conn.execute(
                     "INSERT INTO admins (user_id, user_name, added_by) VALUES ($1, $2, $3)",
-                    target_id, username, user_id,
+                    target_id, username, str(user_id),
                 )
                 await message.answer(f"✅ Пользователь <code>{target_id}</code> добавлен как админ.")
     elif action == "remove":
