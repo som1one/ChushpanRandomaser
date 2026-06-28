@@ -83,13 +83,13 @@ async def on_admin_list(
     # Gather admin list from DB
     async with rig_service.db.acquire() as conn:
         db_admins = await conn.fetch(
-            "SELECT user_id, username, added_by FROM admins ORDER BY created_at ASC"
+            "SELECT user_id, user_name, added_by FROM admins ORDER BY created_at ASC"
         )
 
     if db_admins:
         lines.append("\n<i>Админы из БД:</i>")
         for row in db_admins:
-            username = row["username"] or "—"
+            username = row["user_name"] or "—"
             lines.append(f"  • <code>{row['user_id']}</code> (@{username})")
     else:
         lines.append("\n<i>Админов в БД нет.</i>")
@@ -205,7 +205,7 @@ async def on_admin_manage_input(
                 except Exception:
                     pass
                 await conn.execute(
-                    "INSERT INTO admins (user_id, username, added_by) VALUES ($1, $2, $3)",
+                    "INSERT INTO admins (user_id, user_name, added_by) VALUES ($1, $2, $3)",
                     target_id, username, user_id,
                 )
                 await message.answer(f"✅ Пользователь <code>{target_id}</code> добавлен как админ.")
