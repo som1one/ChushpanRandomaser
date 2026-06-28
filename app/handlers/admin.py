@@ -33,6 +33,7 @@ async def _is_admin(user_id: int, rig_service: RigService) -> bool:
 def _admin_panel_keyboard() -> types.InlineKeyboardMarkup:
     """Build admin panel main menu keyboard."""
     return types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="⚙️ Управление событиями", callback_data="menu:manage")],
         [types.InlineKeyboardButton(text="👥 Список админов", callback_data="admin:list")],
         [
             types.InlineKeyboardButton(text="➕ Добавить админа", callback_data="admin:add"),

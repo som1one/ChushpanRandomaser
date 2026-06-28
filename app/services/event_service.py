@@ -112,6 +112,14 @@ class EventService:
             )
             return [dict(r) for r in rows]
 
+    async def get_all_events(self) -> list[dict]:
+        """Get all events (for admin panel)."""
+        async with self.db.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM events ORDER BY event_id DESC"
+            )
+            return [dict(r) for r in rows]
+
     async def _set_inactive(self, event_id: int) -> None:
         """Deactivate an event."""
         now = datetime.datetime.now(datetime.timezone.utc)

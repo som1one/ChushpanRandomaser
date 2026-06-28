@@ -14,13 +14,20 @@ PAGE_SIZE = 8
 async def _get_manageable_events(
     event_service: EventService, rig_service: RigService, user_id: int
 ) -> list[dict]:
-    """Get events where user is creator or admin."""
-    user_events = await event_service.get_user_events(user_id)
-    manageable = []
-    for event in user_events:
-        if await rig_service.can_manage_event(event["event_id"], user_id):
-            manageable.append(event)
-    return manageable
+    """Get all events for rigging panel (admin-only access).
+
+    Only admins (config or DB) can use the rigging panel — they see all events.
+    """
+    is_admin = user_id in rig_service.admin_ids
+    if not is_admin:
+        async with rig_service.db.acquire() as conn:
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            is_admin = row is not None
+
+    if not is_admin:
+        return []
+
+    return await event_service.get_all_events()
 
 
 def _build_event_list_markup(events: list[dict]) -> types.InlineKeyboardMarkup:
@@ -104,12 +111,12 @@ async def cmd_rig(
     rig_service: RigService,
     event_service: EventService,
 ):
-    """Show list of manageable events for rigging."""
+    """Show list of events for rigging (admin only)."""
     user_id = message.from_user.id
     events = await _get_manageable_events(event_service, rig_service, user_id)
 
     if not events:
-        await message.answer("📭 У вас нет событий для управления подкруткой.")
+        await message.answer("🚫 Нет доступа или нет событий для управления.")
         return
 
     markup = _build_event_list_markup(events)
@@ -125,12 +132,19 @@ async def on_rig_draw(
     rig_service: RigService,
     event_service: EventService,
 ):
-    """Show paginated participant panel for a specific event."""
+    """Show paginated participant panel for a specific event (admin only)."""
     event_id = int(callback.data.split(":")[1])
     user_id = callback.from_user.id
 
-    if not await rig_service.can_manage_event(event_id, user_id):
-        await callback.answer("Нет прав для управления этим событием.", show_alert=True)
+    # Admin check
+    is_admin = user_id in rig_service.admin_ids
+    if not is_admin:
+        async with rig_service.db.acquire() as conn:
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            is_admin = row is not None
+
+    if not is_admin:
+        await callback.answer("🚫 Нет доступа", show_alert=True)
         return
 
     event = await event_service.get_event(event_id)
@@ -149,11 +163,22 @@ async def on_rig_toggle(
     rig_service: RigService,
     event_service: EventService,
 ):
-    """Toggle guaranteed_winner status for a participant and refresh panel."""
+    """Toggle guaranteed_winner status for a participant (admin only)."""
     parts = callback.data.split(":")
     event_id = int(parts[1])
     target_user_id = int(parts[2])
     admin_id = callback.from_user.id
+
+    # Admin check
+    is_admin = admin_id in rig_service.admin_ids
+    if not is_admin:
+        async with rig_service.db.acquire() as conn:
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", admin_id)
+            is_admin = row is not None
+
+    if not is_admin:
+        await callback.answer("🚫 Нет доступа", show_alert=True)
+        return
 
     result = await rig_service.toggle_guaranteed(event_id, target_user_id, admin_id)
 
@@ -161,13 +186,12 @@ async def on_rig_toggle(
         await callback.answer(result.message, show_alert=True)
         return
 
-    # Refresh the panel on current page (extract from message if possible)
+    # Refresh the panel on current page
     event = await event_service.get_event(event_id)
     if not event:
         await callback.answer("Событие не найдено.", show_alert=True)
         return
 
-    # Try to determine current page from the message text
     page = _extract_page_from_text(callback.message.text or "")
 
     header, markup = await _build_participant_panel(rig_service, event, page=page)
@@ -181,14 +205,21 @@ async def on_rig_page(
     rig_service: RigService,
     event_service: EventService,
 ):
-    """Navigate between pages in the participant panel."""
+    """Navigate between pages in the participant panel (admin only)."""
     parts = callback.data.split(":")
     event_id = int(parts[1])
     page = int(parts[2])
     user_id = callback.from_user.id
 
-    if not await rig_service.can_manage_event(event_id, user_id):
-        await callback.answer("Нет прав.", show_alert=True)
+    # Admin check
+    is_admin = user_id in rig_service.admin_ids
+    if not is_admin:
+        async with rig_service.db.acquire() as conn:
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            is_admin = row is not None
+
+    if not is_admin:
+        await callback.answer("🚫 Нет доступа", show_alert=True)
         return
 
     event = await event_service.get_event(event_id)
@@ -207,12 +238,12 @@ async def on_rig_back(
     rig_service: RigService,
     event_service: EventService,
 ):
-    """Return to event list from participant panel."""
+    """Return to event list from participant panel (admin only)."""
     user_id = callback.from_user.id
     events = await _get_manageable_events(event_service, rig_service, user_id)
 
     if not events:
-        await callback.message.edit_text("📭 У вас нет событий для управления подкруткой.")
+        await callback.message.edit_text("🚫 Нет доступа или нет событий.")
         await callback.answer()
         return
 

@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 start_router = Router()
 
 
-def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
+def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Build the main menu inline keyboard."""
     rows = [
         [
@@ -23,8 +23,6 @@ def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📋 События", callback_data="menu:list"),
         ],
     ]
-    if is_admin:
-        rows[-1].append(InlineKeyboardButton(text="⚙️ Управление", callback_data="menu:manage"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -35,17 +33,6 @@ async def cmd_start(message: types.Message, state: FSMContext, **kwargs):
 
     user = message.from_user
     name = user.first_name or user.username or "друг"
-
-    # Check if user is admin to show "Управление" button
-    rig_service = kwargs.get("rig_service")
-    is_admin = False
-    if rig_service:
-        if user.id in rig_service.admin_ids:
-            is_admin = True
-        else:
-            async with rig_service.db.acquire() as conn:
-                row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user.id)
-                is_admin = row is not None
 
     # Handle referral deep link (ref_{event_id}_{inviter_id})
     args = message.text.split(maxsplit=1)
@@ -66,7 +53,7 @@ async def cmd_start(message: types.Message, state: FSMContext, **kwargs):
         f"👋 Привет, {name}!\n\n"
         "Я — бот для проведения розыгрышей, конкурсов и лотерей.\n"
         "Выбери действие из меню ниже:",
-        reply_markup=get_main_menu_keyboard(is_admin=is_admin),
+        reply_markup=get_main_menu_keyboard(),
     )
 
 
@@ -167,7 +154,7 @@ async def menu_list(callback: types.CallbackQuery, state: FSMContext, **kwargs):
 
 @start_router.callback_query(F.data == "menu:manage")
 async def menu_manage(callback: types.CallbackQuery, **kwargs):
-    """Redirect to /rig flow."""
+    """Redirect to /rig flow — admin only."""
     rig_service = kwargs.get("rig_service")
     event_service = kwargs.get("event_service")
     user_id = callback.from_user.id
@@ -176,19 +163,25 @@ async def menu_manage(callback: types.CallbackQuery, **kwargs):
         await callback.answer("Сервис недоступен", show_alert=True)
         return
 
-    # Get manageable events
-    user_events = await event_service.get_user_events(user_id)
-    manageable = []
-    for event in user_events:
-        if await rig_service.can_manage_event(event["event_id"], user_id):
-            manageable.append(event)
+    # Only admins can access rigging panel
+    is_admin = user_id in rig_service.admin_ids
+    if not is_admin:
+        async with rig_service.db.acquire() as conn:
+            row = await conn.fetchval("SELECT 1 FROM admins WHERE user_id=$1", user_id)
+            is_admin = row is not None
 
-    if not manageable:
+    if not is_admin:
+        await callback.answer("🚫 Нет доступа", show_alert=True)
+        return
+
+    events = await event_service.get_all_events()
+
+    if not events:
         await callback.answer("Нет событий для управления", show_alert=True)
         return
 
     rows = []
-    for event in manageable:
+    for event in events:
         title = event.get("title") or f"Событие #{event['event_id']}"
         status = "🟢" if event.get("is_active") else "🔴"
         rows.append([
